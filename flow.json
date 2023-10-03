@@ -14,16 +14,18 @@
 				"testnet": "9a0766d93b6608b7"
 			}
 		},
+		"ModelHub": "./cadence/contracts/ModelHub.cdc",
+		"NFTStorefrontV2": {
+			"source": "",
+			"aliases": {
+				"emulator": "f8d6e0586b0a20c7"
+			}
+		},
 		"NonFungibleToken": {
 			"source": "./cadence/contracts/interfaces/NonFungibleToken.cdc",
 			"aliases": {
 				"mainnet": "1d7e57aa55817448",
 				"testnet": "631e88ae7f1d7c20"
-			}
-		},
-		"NFTStorefrontV2": {
-			"aliases": {
-				"emulator": "f8d6e0586b0a20c7"
 			}
 		}
 	},
@@ -40,6 +42,13 @@
 		"testnet": {
 			"address": "9e654102cb4c3c0e",
 			"key": "dc12f1409e234436c6b83c3f196efd5ee009d4f3d124b1b43dae1e573787fc4a"
+		}
+	},
+	"deployments": {
+		"testnet": {
+			"testnet": [
+				"ModelHub"
+			]
 		}
 	}
 }

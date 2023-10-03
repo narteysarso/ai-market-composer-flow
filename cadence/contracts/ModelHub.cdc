@@ -2,7 +2,7 @@ import FungibleToken from "FungibleToken"
 import NonFungibleToken from "NonFungibleToken"
 import FlowToken from "FlowToken"
 
-pub contract ModelHub{
+pub contract ModelHub: NonFungibleToken {
 
     pub let owners: {String: Address}
     pub let nameHashToIDs: {String: UInt64}
@@ -19,7 +19,7 @@ pub contract ModelHub{
 
 
     pub event ContractInitialized()
-    pub event Deposit(id: UInt64, to : Address)
+    pub event Deposit(id: UInt64, to : Address?)
     pub event Withdraw(id: UInt64, from: Address?)
     pub event ModelMinted(id: UInt64, name: String, nameHash: String, uri: String, createdAt: UFix64, receiver: Address)
     pub event ModelUpdated(id: UInt64, name: String, nameHash: String, uri: String, updatedAt: UFix64, updator: Address)
@@ -100,7 +100,7 @@ pub contract ModelHub{
         pub fun setUri(uri: String)
     }
 
-    pub resource Model : IModelPrivate, IModelPublic, NonFungibleToken.INFT  {
+    pub resource NFT : IModelPrivate, IModelPublic, NonFungibleToken.INFT  {
         pub let id: UInt64
         pub let name: String
         pub let nameHash: String
@@ -164,37 +164,53 @@ pub contract ModelHub{
     }
 
     pub resource interface ICollectionPrivate {
-        access(account) fun mintModel(name: String, nameHash: String, expiresAt: UFix64, receiver: Capability<&NonFungibleToken.Receiver>)
-        pub fun borrowModelPrivate(id: UInt64): &ModelHub.Model
+        access(account) fun mintModel(
+            name: String,
+            nameHash: String,
+            uri: String,
+            bio: String,
+            metadata: {String: String}?,
+            receiver: Capability<&{NonFungibleToken.Receiver}>
+        )
+        pub fun borrowModelPrivate(id: UInt64): &ModelHub.NFT
     }
     
     pub resource Collection : ICollectionPrivate, ICollectionPublic, NonFungibleToken.Provider, NonFungibleToken.Receiver, NonFungibleToken.CollectionPublic{
-        pub var ownedModels: @{UInt64: Model}
+        pub var ownedNFTs: @{UInt64: NonFungibleToken.NFT}
 
         init(){
-            self.ownedModels <- {}
+            self.ownedNFTs <- {}
         }
 
-        pub fun withdraw(withdrawID: UInt64): @ModelHub.Model{
-            let model <- self.ownedModels.remove(key: withdrawID) ?? panic("Model not found")
+        pub fun withdraw(withdrawID: UInt64): @NonFungibleToken.NFT{
+            let model <- self.ownedNFTs.remove(key: withdrawID) ?? panic("Model not found")
             emit Withdraw(id: withdrawID, from: self.owner?.address)
             return <- model
         }
 
-        pub fun deposit(model: @Model){
-            let id = model.id
-            let oldModel  <- self.ownedModels[id] <- model
+        pub fun deposit(token: @NonFungibleToken.NFT){
+            let id = token.id
+            let oldModel  <- self.ownedNFTs[id] <- token
 
             emit Deposit(id: id, to: self.owner?.address!)
             destroy oldModel
         }
 
         pub fun getIDs(): [UInt64]{
-            return self.ownedModels.keys
+            return self.ownedNFTs.keys
         }
 
-        pub fun borrowModel(id: UInt64): &NonFungibleToken.NFT {
-            return (&self.ownedModels[id] as &NonFungibleToken.NFT?)!
+        pub fun borrowNFT(id: UInt64): &NonFungibleToken.NFT {
+            return (&self.ownedNFTs[id] as &NonFungibleToken.NFT?)!
+        }
+        
+        pub fun borrowModel(id: UInt64): &{ModelHub.IModelPublic} {
+            pre {
+                self.ownedNFTs[id] != nil : "Model does not exist"
+            }
+
+            let token = (&self.ownedNFTs[id] as auth &NonFungibleToken.NFT?)!
+            return token as! &ModelHub.NFT
         }
         
         // ICollectionPrivate
@@ -204,13 +220,13 @@ pub contract ModelHub{
             uri: String,
             bio: String,
             metadata: {String: String}?,
-            receiver: Capability<&NonFungibleToken.Receiver>
+            receiver: Capability<&{NonFungibleToken.Receiver}>
         ){
             pre {
                 ModelHub.isAvailable(nameHash: nameHash) : "Model name already taken"
             }
 
-            let model <- create ModelHub.Model(
+            let model <- create ModelHub.NFT(
                                 id: ModelHub.totalSupply,
                                 name: name,
                                 nameHash: nameHash,
@@ -232,19 +248,19 @@ pub contract ModelHub{
                 receiver: receiver.address 
             )
 
-            receiver.borrow()!.deposit(model: <-model)
+            receiver.borrow()!.deposit(token: <-model)
         }
 
-        pub fun borrowModelPrivate(id: UInt64): &ModelHub.Model {
+        pub fun borrowModelPrivate(id: UInt64): &ModelHub.NFT {
             pre {
-                self.ownedModels[id] != nil: "model doesn't exist"
+                self.ownedNFTs[id] != nil: "model doesn't exist"
             }
-            let ref = (&self.ownedModels[id] as auth &NonFungibleToken.NFT?)!
-            return ref as! &ModelHub.Model
+            let ref = (&self.ownedNFTs[id] as auth &NonFungibleToken.NFT?)!
+            return ref as! &ModelHub.NFT
         }
 
         destroy (){
-            destroy self.ownedModels
+            destroy self.ownedNFTs
         }
     }
 
@@ -345,6 +361,10 @@ pub contract ModelHub{
 
         pub fun setPrices(nameHash: String, val: UFix64) {
             self.prices[nameHash] = val
+        }
+
+        destroy() {
+            destroy self.payVault
         }
     }
 
